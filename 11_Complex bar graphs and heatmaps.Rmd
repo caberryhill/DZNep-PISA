@@ -1,0 +1,197 @@
+---
+title: "Bar graphs of select complexes"
+author: "Christine Berryhill"
+date: "2024-04-19"
+output: html_document
+---
+
+
+```{r}
+library(ggplot2)
+library(ggsimplestats)
+library(rstatix)
+library(ggpubr)
+library(dplyr)
+library(reshape2)
+library(stringr)
+library(pheatmap)
+
+pisa_rna<- read.csv("Inputs/PISA and RNA data.csv")
+
+```
+
+# Pulling out components of the:
+## methionine Cycle
+## MSC
+## Methyltransferases
+```{r}
+# Methionine Cycle
+met_cycle<- c("MAT2A", "MAT2B", "MTR", "AHCY")
+##Filtering the joint pisa and rna dataset for components of the Methionine cycle
+met_cycle_df<- pisa_rna%>%
+  filter(Gene.Name %in% met_cycle)
+##Subsetting df to only abundance values of transcript, proteome, and pisa values, and melting for ggplot visualization
+met_cycle_df<- met_cycle_df[,c(6,8,10,12,7,9,11,13,21:24,29:32,46:53,63)]
+met_cycle_melt<-melt(met_cycle_df)
+met_cycle_melt$Treatment<- rep(rep(c("Control", "DZNep"),each = 16), times = 3)
+met_cycle_melt$Type<- rep(c("Transcript","Global", "PISA"), each = 32)
+met_cycle_melt$Replicate<- rep(rep(c("Rep1", "Rep2","Rep3","Rep4"), each = 4), times= 6)
+
+# MSC
+multienzyme<- c("AIMP1","AIMP2","DARS1","EEF1E1","EPRS1","IARS1","KARS1","LARS1","MARS1","QARS1","RARS1")
+##Filtering the joint pisa and rna dataset for components of the Methionine cycle
+multienzyme_df<- pisa_rna%>%
+  filter(Gene.Name.1 %in% multienzyme)
+##Subsetting df to only abundance values of transcript, proteome, and pisa values, and melting for ggplot visualization
+multienzyme_df<- multienzyme_df[,c(6,8,10,12,7,9,11,13,21:24,29:32,46:53,63)]
+multienzyme_melt<-melt(multienzyme_df)
+multienzyme_melt$Treatment<- rep(rep(c("Control", "DZNep"),each = 44), times = 3)
+multienzyme_melt$Type<- rep(c("Transcript","Global", "PISA"), each = 88)
+multienzyme_melt$Replicate<- rep(rep(c("Rep1", "Rep2","Rep3","Rep4"), each = 11), times= 6)
+
+# Methyltransferases
+methyltransferase<- c("DNMT1", "NTMT1","LCMT1", "ASMTL")
+##Filtering the joint pisa and rna dataset for components of the Methionine cycle
+methyltransferase_df<- pisa_rna%>%
+  filter(Gene.Name %in% methyltransferase)
+##Subsetting df to only abundance values of transcript, proteome, and pisa values, and melting for ggplot visualization
+methyltransferase_df<- methyltransferase_df[,c(6,8,10,12,7,9,11,13,21:24,29:32,46:53,63)]
+methyltransferase_df_melt<-melt(methyltransferase_df)
+methyltransferase_df_melt$Treatment<- rep(rep(c("Control", "DZNep"),each = 16), times = 3)
+methyltransferase_df_melt$Type<- rep(c("Transcript","Global", "PISA"), each = 32)
+methyltransferase_df_melt$Replicate<- rep(rep(c("Rep1", "Rep2","Rep3","Rep4"), each = 4), times= 6)
+
+
+```
+
+# Bar Graphs
+```{r Methionine Cycle}
+group.colors = c("Control" = "#18288d", "DZNep" = "#877817")
+
+
+b.plot<- ggplot(met_cycle_melt, aes(x = Treatment, y = value, group = Treatment, fill = Treatment))+
+  geom_boxplot()+
+  geom_jitter(aes(shape = Replicate, size = 2))+
+  facet_wrap(Type~Gene.Name.1, scales = "free")+
+  theme_bw()+
+  scale_fill_manual(values = group.colors)+
+    labs(title = "Global and PISA values for the Methionine Cycle",
+         y = "",
+         x = "")+
+  geom_signif(comparisons = list(c("Control", "DZNep")),
+              map_signif_level = T)+
+  theme(axis.text=element_text(size=20),
+        legend.text=element_text(size=20),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+
+b.plot
+
+ggsave("Met.cycle bar graph.test.eps", b.plot, device = "eps", height = 15, width = 20)
+```
+
+```{r MSC}
+group.colors = c(Control = "#18288d", DZNep = "#877817")
+
+
+b.plot<- ggplot(multienzyme_melt, aes(x = Treatment, y = value, group = Treatment, fill = Treatment))+
+  geom_boxplot()+
+  geom_jitter(aes(shape = Replicate, size = 2))+
+  facet_wrap(Gene.Name.1~Type, scales = "free", ncol = 3)+
+  theme_bw()+
+  scale_fill_manual(values = group.colors)+
+    labs(title = "Global and PISA values for Components of the Multienzyme Complex",
+         y = "",
+         x = "")+
+  geom_signif(comparisons = list(c("Control", "DZNep")))
+
+b.plot
+
+ggsave("Multienzyme bar graph.eps", b.plot, device = "eps", height = 50, width = 12, limitsize = F)
+```
+
+```{r Methyltransferases}
+group.colors = c(Control = "#18288d", DZNep = "#877817")
+
+
+c.plot<- ggplot(methyltransferase_df_melt, aes(x = Treatment, y = value, group = Treatment, fill = Treatment))+
+  geom_boxplot()+
+  geom_jitter(aes(shape = Replicate, size = 2))+
+  facet_wrap(Gene.Name~Type, scales = "free", ncol = 3)+
+  theme_bw()+
+  scale_fill_manual(values = group.colors)+
+    labs(title = "Global and PISA values for Thermally Altered Methyltransferases",
+         y = "",
+         x = "")+
+  geom_signif(comparisons = list(c("Control", "DZNep")))
+
+c.plot
+
+ggsave("Methyltransferase bar graph.eps", c.plot, device = "eps", height = 20, width = 12)
+```
+# Heatmaps for FC 
+```{r Methionine Cycle}
+met_cycle<- c("MAT2A", "MAT2B", "MTR", "AHCY")
+met_cycle_df<- pisa_rna%>%
+  filter(Gene.Name.1 %in% met_cycle)
+met_cycle_df<- met_cycle_df[,c(6,8,10,12,7,9,11,13,21:24,29:32,46:53,63)]
+
+#DNZep/Control
+met_cycle_df$rna_foldchange<- (rowMeans(met_cycle_df[,c(5:8)])/rowMeans(met_cycle_df[,c(1:4)]))
+met_cycle_df$protein_foldchange<- (rowMeans(met_cycle_df[,c(13:16)])/rowMeans(met_cycle_df[,c(9:12)]))
+met_cycle_df$pisa_foldchange<- (rowMeans(met_cycle_df[,c(21:24)])/rowMeans(met_cycle_df[,c(17:20)]))
+
+met_cycle_matrix<- met_cycle_df[,c(25:28)]
+rownames(met_cycle_matrix)<- met_cycle_matrix[,1]
+met_cycle_matrix<- met_cycle_matrix[,-c(1)]
+met_cycle_matrix_log10<- log10(met_cycle_matrix)
+
+
+svg("Met Cycle DZNep vs Control.svg", height = 10, width = 10)
+
+heatmap<- pheatmap(met_cycle_matrix,
+             color = colorRampPalette(c("navy", "white", "darkred"))(50),
+             cellwidth = 50,
+             cellheight = 20,
+             fontsize_row = 10,
+             main = "Fold Change (DZNep/Control)",
+             border_color = NA,
+             cluster_cols = T)
+dev.off()
+
+
+
+```
+
+```{r MSC}
+multienzyme<- c("AIMP1","AIMP2","DARS1","EEF1E1","EPRS1","IARS1","KARS1","LARS1","MARS1","QARS1","RARS1")
+multienzyme_df<- pisa_rna%>%
+  filter(Gene.Name.1 %in% multienzyme)
+multienzyme_df<- multienzyme_df[,c(6,8,10,12,7,9,11,13,21:24,29:32,46:53,63)]
+
+#DNZep/Control
+multienzyme_df$rna_foldchange<- (rowMeans(multienzyme_df[,c(5:8)])/rowMeans(multienzyme_df[,c(1:4)]))
+multienzyme_df$protein_foldchange<- (rowMeans(multienzyme_df[,c(13:16)])/rowMeans(multienzyme_df[,c(9:12)]))
+multienzyme_df$pisa_foldchange<- (rowMeans(multienzyme_df[,c(21:24)])/rowMeans(multienzyme_df[,c(17:20)]))
+
+multienzyme_matrix<- multienzyme_df[,c(25:28)]
+rownames(multienzyme_matrix)<- multienzyme_matrix[,1]
+multienzyme_matrix<- multienzyme_matrix[,-c(1)]
+multienzyme_matrix_log10<- log10(multienzyme_matrix)
+
+svg("MSC DZNep vs Control.svg", height = 10, width = 10)
+
+heatmap<- pheatmap(multienzyme_matrix,
+             color = colorRampPalette(c("navy", "white", "darkred"))(50),
+             cellwidth = 50,
+             cellheight = 20,
+             fontsize_row = 10,
+             main = "Fold Change (DZNep/Control)",
+             border_color = NA,
+             cluster_cols = T)
+dev.off()
+
+
+
+```
+

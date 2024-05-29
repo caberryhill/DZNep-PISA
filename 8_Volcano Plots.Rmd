@@ -1,0 +1,414 @@
+---
+title: "Volcano_plots_v2"
+author: "Christine Berryhill"
+date: "2023-02-20"
+output: html_document
+---
+
+# Opening up the documents
+```{r}
+library(ggplot2)
+library(ggrepel)
+library(dplyr)
+library(ggpubr)
+
+#Generated from Previously seen observed Kme sites.Rmd
+pisa_hits<- read.csv("/home/cberry/Documents/PISA_Analysis/Analysis/Total workup of pisa data.csv")
+# Generated from Kme PISA analysis.Rmd
+kme_peptides_pisa<- read.csv("/home/cberry/Documents/PISA_Analysis/Analysis/Kme_PISA_global_changes.csv")
+# RNA seq data
+rna_seq_2<- read.csv("/home/cberry/Documents/PISA_Analysis/Analysis/rna_analysis.csv")
+
+```
+# Volcano plot of RNA seq
+```{r}
+rna_seq_2 <- rna_seq_2 %>%
+  mutate(gene_type = case_when(log2FoldChange >= 1 & padj <= 0.05 ~ "up",
+                               log2FoldChange <= -1 & padj <= 0.05 ~ "down",
+                               TRUE ~ "ns"))   
+
+rna_seq_2 %>%
+  count(gene_type)
+
+cols <- c("up" = "#fe0615ff", "down" = "#26b3ff", "ns" = "grey") 
+sizes <- c("up" = 1.5, "down" = 1.5, "ns" = 0.5) 
+
+a<-rna_seq_2%>%
+  ggplot(aes(x = (log2FoldChange),
+             y = -log10(padj),
+             fill = gene_type,    
+             size = gene_type)) + 
+  geom_point(shape = 21, # Specify shape and colour as fixed local parameters    
+             colour = "black") + 
+  geom_hline(yintercept = 1.3,
+             linetype = "dashed") +
+  geom_vline(xintercept = 1,
+             linetype= "dashed")+
+    geom_vline(xintercept = -1,
+             linetype= "dashed")+
+  scale_fill_manual(values = cols) + # Modify point colour
+  scale_size_manual(values = sizes) + # Modify point size
+  theme_classic()+
+  labs(title= "mRNA expression",
+       x = "log2(DZNep/Control)",
+       y = "-log10(padj)")+
+  theme(legend.position = "none")
+
+a
+ggsave("RNA seq volcano plot.eps", a, device = "eps", width = 5, height = 5)
+```
+
+#Proteome volcano plots
+```{r}
+
+cols <- c("Up with DZNep" = "#fe0615ff", "Down with DZNep" = "#26b3ff", "ns" = "grey") 
+sizes <- c("Up with DZNep" = 2, "Down with DZNep" = 2, "ns" = 1) 
+
+a<-pisa_hits%>%
+  ggplot(aes(x = log2(FC_global),
+             y = -log10(pval),
+             fill = protein_type,    
+             size = protein_type)) + 
+  geom_point(shape = 21, # Specify shape and colour as fixed local parameters    
+             colour = "black") + 
+  geom_hline(yintercept = 1.3,
+             linetype = "dashed") +
+  
+  geom_vline(xintercept = 0,
+             linetype= "dashed")+
+  scale_fill_manual(values = cols) + # Modify point colour
+  scale_size_manual(values = sizes) + # Modify point size
+  scale_x_continuous(limits = c(-3, 3)) +
+  theme_classic()+
+  labs(title= "Differential global protein abundances 
+       after DZNep treatment",
+       x = "log2(DZNep/Control)",
+       y = "-log10(pvalue)")+
+  theme(legend.position = "none")
+
+a
+#ggsave("Global proteome changes volcanoplot.eps", a, device = "eps", width = 5, height = 5)
+
+```
+
+
+#PISA Volcano plots
+```{r}
+cols <- c("Stabilized with DZNep" = "#fe0615ff", "Destabilized with DZNep" = "#26b3ff", "ns" = "grey") 
+sizes <- c("Stabilized with DZNep" = 2, "Destabilized with DZNep" = 2, "ns" = 1) 
+
+b<-pisa_hits%>%
+  ggplot(aes(x = log2(pisa_sm_mean),
+             y = -log10(pval.pisa),
+             fill = protein_type.pisa,    
+             size = protein_type.pisa))+
+             #label = Gene.Name)) + 
+  geom_point(shape = 21, # Specify shape and colour as fixed local parameters    
+             colour = "black") + 
+  geom_hline(yintercept = 1.3,
+             linetype = "dashed") + 
+  
+  geom_vline(xintercept = 0,
+             linetype= "dashed")+
+  #geom_label_repel(data = pisa_hits[pisa_hits$Gene.Name=="CDK6",],
+                 #max.overlaps = Inf,
+                #box.padding = unit(1,"lines"),
+                # size = 5
+                 #)+
+  scale_fill_manual(values = cols) + # Modify point colour
+  scale_size_manual(values = sizes) + # Modify point size
+  scale_x_continuous(limits = c(-3, 3)) +
+  theme_classic()+
+  labs(title= "Differential PISA protein abundances after DZNep treatment",
+       x = "log2(nPISA(DZNep/Control))",
+       y = "-log10(pvalue)")+
+  theme(legend.position = "none")
+
+b
+ggsave("PISA proteome changes volcanoplot with labels.eps", b, device = "eps", width = 5, height = 5)
+
+```
+
+
+
+#Combined rna, protein, and pisa volcano plots of components of the Methionine Cycle, MSC, and methyltransferases
+
+```{r set up}
+library(dplyr)
+library(ggplot2)
+pisa_rna<- read.csv("/home/cberry/Documents/PISA_Analysis/Analysis/PISA and RNA data.csv")
+rna<- read.csv("/home/cberry/Documents/PISA_Analysis/Analysis/rna_analysis.csv")
+
+multienzyme<- c("AIMP1","AIMP2","DARS1","EEF1E1","EPRS1","IARS1","KARS1","LARS1","MARS1","QARS1","RARS1")
+pisa_rna<- pisa_rna%>%
+  mutate(multienzyme = ifelse(Gene.Name.1 %in% multienzyme, Gene.Name, ""))
+methyltransferase<- c("DNMT1", "NTMT1","LCMT1", "ASMTL")
+pisa_rna<- pisa_rna%>%  mutate(methyltransferase = ifelse(Gene.Name.1 %in% methyltransferase, Gene.Name, ""))
+met_cycle<- c("AHCY","MAT2A","MAT2B","MTR")
+pisa_rna<- pisa_rna%>%
+  mutate(met_cycle = ifelse(Gene.Name.1 %in% met_cycle, Gene.Name, ""))
+
+
+rna<- rna%>%
+  mutate(multienzyme = ifelse(Gene.name %in% multienzyme, Gene.name, ""))
+methyltransferase<- c("DNMT1", "NTMT1","LCMT1", "ASMTL")
+rna<- rna%>%  mutate(methyltransferase = ifelse(Gene.name %in% methyltransferase, Gene.name, ""))
+met_cycle<- c("AHCY","MAT2A","MAT2B","MTR")
+rna<- rna%>%
+  mutate(met_cycle = ifelse(Gene.name %in% met_cycle, Gene.name, ""))
+
+```
+
+```{r Volcano plot}
+
+#PISA
+a<-pisa_rna%>%
+  ggplot(aes(x = log2(pisa_sm_mean),
+             y = -log10(pval.pisa))) + 
+  geom_point(data = pisa_rna[pisa_rna$multienzyme==""|
+                               pisa_rna$methyltransferase==""|
+                               pisa_rna$met_cycle=="",],shape = 21,  
+             colour = "#808080") + 
+  geom_point(data = pisa_rna[pisa_rna$multienzyme != "",], shape = 21,size = 3,
+             colour = "#6527a1", fill = "#9367bd")+
+  geom_point(data = pisa_rna[pisa_rna$methyltransferase != "",], shape = 21,size =3,
+             colour = "#135032", fill = "#27a165")+
+  geom_point(data = pisa_rna[pisa_rna$met_cycle != "",], shape = 21,size = 3,
+             colour = "#a16527", fill = "#e69138")+
+  geom_hline(yintercept = 1.3,
+             linetype = "dashed") +
+  geom_vline(xintercept = 0,
+             linetype= "dashed")+
+  scale_x_continuous(limits = c(-2, 2)) +
+  theme_classic()+
+  labs(title= "Differential PISA protein abundances after DZNep treatment",
+       x = "log2(nPISA (DZNep/Control))",
+       y = "-log10(pvalue)")+
+  theme(legend.position = "none",
+        axis.text=element_text(size=12))
+
+a
+
+#Protein
+b<-pisa_rna%>%
+  ggplot(aes(x = log2(FC_global),
+             y = -log10(pval))) + 
+  geom_point(data = pisa_rna[pisa_rna$multienzyme==""|
+                               pisa_rna$methyltransferase==""|
+                               pisa_rna$met_cycle=="",],shape = 21,  
+             colour = "#808080") + 
+  geom_point(data = pisa_rna[pisa_rna$multienzyme != "",], shape = 21,size = 3,
+             colour = "#6527a1", fill = "#9367bd")+
+  geom_point(data = pisa_rna[pisa_rna$methyltransferase != "",], shape = 21,size =3,
+             colour = "#135032", fill = "#27a165")+
+  geom_point(data = pisa_rna[pisa_rna$met_cycle != "",], shape = 21,size = 3,
+             colour = "#a16527", fill = "#e69138")+
+  geom_hline(yintercept = 1.3,
+             linetype = "dashed") +
+  geom_vline(xintercept = 0,
+             linetype= "dashed")+
+  scale_x_continuous(breaks = c(-3,-2,-1,0,1,2,3)) +
+  theme_classic()+
+  labs(title= "Differential protein abundances after DZNep treatment",
+       x = "log2(DZNep/Control)",
+       y = "-log10(pvalue)")+
+  theme(legend.position = "none")+
+  theme(legend.position = "none",
+        axis.text=element_text(size=12))
+
+b
+
+#RNA
+c<-rna%>%
+  ggplot(aes(x = (log2FoldChange),
+             y = -log10(padj))) + 
+  geom_point(data = rna[rna$multienzyme==""|
+                               rna$methyltransferase==""|
+                               rna$met_cycle=="",],shape = 21,  
+             colour = "#808080") + 
+  geom_point(data = rna[rna$multienzyme != "",], shape = 21,size = 3,
+             colour = "#6527a1", fill = "#9367bd")+
+  geom_point(data = rna[rna$methyltransferase != "",], shape = 21,size =3,
+             colour = "#135032", fill = "#27a165")+
+  geom_point(data = rna[rna$met_cycle != "",], shape = 21,size = 3,
+             colour = "#a16527", fill = "#e69138")+
+  geom_hline(yintercept = 1.3,
+             linetype = "dashed") +
+  
+  geom_vline(xintercept = 1,
+             linetype= "dashed")+
+   geom_vline(xintercept = -1,
+             linetype= "dashed")+
+  scale_x_continuous(breaks = c(-10,-9,-8,-7,-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,6,7,8,9,10)) +
+  theme_classic()+
+  labs(title= "Differential protein abundances after DZNep treatment",
+       x = "log2(DZNep/Control)",
+       y = "-log10(padj)")+
+  theme(legend.position = "none")+
+  theme(legend.position = "none",
+        axis.text=element_text(size=12))
+
+c
+ggsave("all put together Global volcano.eps", b, device = "eps", width = 5, height = 5)
+ggsave("all put together PISA volcano.eps", a, device = "eps", width = 5, height = 5)
+ggsave("all put together rna volcano.eps", c, device = "eps", width = 5, height = 5)
+
+```
+
+
+# Lysine Methylated peptides
+
+```{r}
+kme_peptides_pisa<- read.csv("/home/cberry/Documents/PISA_Analysis/Analysis/Complete_Kme_PISA_global_changes.csv")
+```
+
+```{r}
+cols2 <- c("Stabilized with DZNep" = "#ff1a1a", "Destabilized with DZNep" = "#26b3ff", "ns" = "grey") 
+sizes2 <- c("Stabilized with DZNep" = 2, "Destabilized with DZNep" = 2, "ns" = 1) 
+cols <- c("Norm.Up with DZNep" = "#fe0615ff", "Norm.Down with DZNep" = "#26b3ff", "ns" = "grey") 
+sizes <- c("Norm.Up with DZNep" = 2, "Norm.Down with DZNep" = 2, "ns" = 1) 
+
+
+a<-kme_peptides_pisa%>%
+  ggplot(aes(x = log2(Norm_Global_Kme_FC_mean),
+             y = -log10(Norm.global.kme.pval),
+             fill = Norm_global_kme_protein_type,    
+             size = Norm_global_kme_protein_type)) + 
+  geom_point(shape = 21, # Specify shape and colour as fixed local parameters    
+             colour = "black") + 
+  geom_hline(yintercept = 1.3,
+             linetype = "dashed") +
+  
+  geom_vline(xintercept = 0,
+             linetype= "dashed")+
+  scale_fill_manual(values = cols) + # Modify point colour
+  scale_size_manual(values = sizes) + # Modify point size
+  scale_x_continuous(limits = c(-3, 3)) +
+  theme_classic()+
+  labs(title= "Differential Normalized Kme Peptide abundances after DZNep treatment",
+       x = "log2(DZNep/Control)",
+       y = "-log10(pvalue)")+
+  theme(legend.position = "none")
+
+a
+
+
+b<-kme_peptides_pisa%>%
+  ggplot(aes(x = log2(kme.pisa.sm.mean),
+             y = -log10(kme.pisa.pval),
+             fill = global_kme_pisa_type,    
+             size = global_kme_pisa_type)) + 
+  geom_point(shape = 21, # Specify shape and colour as fixed local parameters    
+             colour = "black") + 
+  geom_hline(yintercept = 1.3,
+             linetype = "dashed") +
+  
+  geom_vline(xintercept = 0,
+             linetype= "dashed")+
+  geom_label_repel(data = kme_peptides_pisa%>%
+                     filter(global_kme_pisa_type == "Stabilized with DZNep" | global_kme_pisa_type == "Destabilized with DZNep" & global_kme_pisa_type != ""),
+                   aes(label = Format3),
+                  max.overlaps = Inf,
+                   box.padding = 0.85,
+                  size = 3)+
+  scale_fill_manual(values = cols2) + # Modify point colour
+  scale_size_manual(values = sizes2) + # Modify point size
+  scale_x_continuous(limits = c(-3, 3)) +
+  theme_classic()+
+  labs(title= "Differential Kme Peptide PISA abundances after DZNep treatment",
+       x = "log2(nPISA(DZNep/Control))",
+       y = "-log10(pvalue)")+
+  theme(legend.position = "none")
+
+b
+#ggsave("Kme peptide Global volcanoplot.eps", a, device = "eps", width = 5.5, height = 5.5)
+#ggsave("Kme peptide PISA volcanoplot.eps", b, device = "eps", width = 5.5, height = 5.5)
+
+
+```
+
+## layering the methyl status
+
+```{r}
+kme_peptides_pisa$methylstate_protein<- paste0(kme_peptides_pisa$Methyl_state,"-", kme_peptides_pisa$Norm_global_kme_protein_type)
+
+kme_peptides_pisa$methylstate_pisa<- paste0(kme_peptides_pisa$Methyl_state, "-", kme_peptides_pisa$global_kme_pisa_type)
+
+```
+
+
+```{r}
+#PISA
+cols2 <- c("m3" = "#C90076", 
+           "m2" = "#421E22",
+           "m1" = "#58A6A6") 
+
+
+```
+
+```{r}
+#Protein
+a<-kme_peptides_pisa%>%
+  ggplot(aes(x = log2(Norm_Global_Kme_FC_mean),
+             y = -log10(Norm.global.kme.pval))) + 
+  geom_point(shape = 21, # Specify shape and colour as fixed local parameters    
+             colour = "black" ) +
+  geom_point(data = kme_peptides_pisa[kme_peptides_pisa$Methyl_state=="m3",],shape = 21,  
+             colour = "black", fill = "#C90076", size = 2) +   
+  geom_point(data = kme_peptides_pisa[kme_peptides_pisa$Methyl_state=="m2",],shape = 21,  
+             colour = "black", fill = "#421E22", size = 2) + 
+  geom_point(data = kme_peptides_pisa[kme_peptides_pisa$Methyl_state=="m1",],shape = 21,  
+             colour = "black", fill = "#58A6A6", size = 2) +
+  geom_hline(yintercept = 1.3,
+             linetype = "dashed") +
+  geom_vline(xintercept = 0,
+             linetype= "dashed")+
+  scale_fill_manual(values = cols2) + 
+  scale_x_continuous(limits = c(-3, 3),
+                     breaks = c(-4,-3,-2,-1,0,1,2,3,4)) +
+  theme_classic()+
+  labs(title= "Differential Normalized Kme Peptide abundances after DZNep treatment",
+       x = "log2(DZNep/Control)",
+       y = "-log10(pvalue)")+
+  theme(legend.position = "none",
+        axis.text=element_text(size=12))
+
+a
+
+
+b<-kme_peptides_pisa%>%
+  ggplot(aes(x = log2(kme.pisa.sm.mean),
+             y = -log10(kme.pisa.pval))) + 
+  geom_point(shape = 21, # Specify shape and colour as fixed local parameters    
+             colour = "black" ) +
+  geom_point(data = kme_peptides_pisa[kme_peptides_pisa$Methyl_state=="m3",],shape = 21,  
+             colour = "black", fill = "#C90076", size = 2) +   
+  geom_point(data = kme_peptides_pisa[kme_peptides_pisa$Methyl_state=="m2",],shape = 21,  
+             colour = "black", fill = "#421E22", size = 2) + 
+  geom_point(data = kme_peptides_pisa[kme_peptides_pisa$Methyl_state=="m1",],shape = 21,  
+             colour = "black", fill = "#58A6A6", size = 2) +
+  geom_hline(yintercept = 1.3,
+             linetype = "dashed") +
+  geom_vline(xintercept = 0,
+             linetype= "dashed")+
+  scale_fill_manual(values = cols2) + # Modify point colour
+  scale_size_manual(values = sizes2) + # Modify point size
+  scale_x_continuous(limits = c(-2, 2),
+                     breaks = c(-4,-3,-2,-1,0,1,2,3,4)) +
+  theme_classic()+
+  labs(title= "Differential Kme Peptide PISA abundances after DZNep treatment",
+       x = "log2(nPISA(DZNep/Control))",
+       y = "-log10(pvalue)")+
+  theme(legend.position = "none",
+        axis.text=element_text(size=12))
+
+b
+ggsave("Kme peptide Global volcanoplot_with methyl states.eps", a, device = "eps", width = 5.5, height = 5.5)
+ggsave("Kme peptide PISA volcanoplot_with methyl states.eps", b, device = "eps", width = 5.5, height = 5.5)
+
+ggsave("Kme peptide Global volcanoplot_with methyl states.png", a, device = "png", width = 5.5, height = 5.5)
+ggsave("Kme peptide PISA volcanoplot_with methyl states.png", b, device = "png", width = 5.5, height = 5.5)
+
+```
+
+

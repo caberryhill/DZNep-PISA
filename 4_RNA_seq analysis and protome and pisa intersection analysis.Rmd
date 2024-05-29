@@ -1,0 +1,285 @@
+
+
+```{r}
+#Generated from PISA ananalysis.Rmd
+pisa_hits<- read.csv("Inputs/PISA_global_changes.csv")
+#Normalized counts from Azenta life sciences
+rna_seq_2<- read.csv("/home/cberry/Documents/PISA_Analysis/Analysis/rna_analysis.csv")
+
+library(UpSetR)
+library(dplyr)
+library(ggplot2)
+library(ggpubr)
+library(org.Hs.eg.db)
+library(AnnotationDbi)
+library(GGally)
+library(ggvenn)
+library(ggVennDiagram)
+
+```
+#Converting Ensembl to Uniprot
+```{r}
+
+x<-mapIds(org.Hs.eg.db,
+           keys = pisa_hits$Accession,
+           column = "ENSEMBL",
+           keytype = "UNIPROT")
+
+x<- as.data.frame(x)
+
+pisa_hits<- cbind(pisa_hits, x)
+
+pisa_hits<- pisa_hits%>%
+    rename_at('x', ~"ID")
+
+rna_seq_2 <- rna_seq_2 %>%
+  mutate(gene_type = case_when(log2FoldChange >= 1 & padj <= 0.05 ~ "up",
+                               log2FoldChange <= -1 & padj <= 0.05 ~ "down",
+                               TRUE ~ "ns"))  
+
+rna_pisa_df_2<- inner_join(rna_seq_2, pisa_hits, by = "ID")
+
+anti_pisa_2<- anti_join(pisa_hits, rna_seq_2, by = "ID")
+
+
+
+```
+
+# write csv for future use
+```{r}
+write.csv(rna_pisa_df_2, "PISA and RNA data.csv")
+```
+
+# RNA Correlation plot
+
+```{r}
+cont<- rna_seq_2[,c(5,7,9,11)]
+cont<- cont+0.01
+
+a<-ggpairs(log10(cont),
+        title = "Correlation between Global Control Transcriptome Replicates",
+        xlab = "log10(Abundance)",
+        ylab = "log10(Abundance)",
+        columnLabels = c("Rep 1", "Rep2","Rep 3", "Rep 4"),
+        upper = list(continuous = wrap('cor', size = 5)),
+        lower=list(continuous="smooth"))+
+  theme_bw()
+a
+#DZNep Global Reps
+dznep<- rna_seq_2[,c(6,8,10,12)]
+dznep<- dznep+0.01
+b<-ggpairs(log10(dznep),
+        title = "Correlation between Global DZNep Transcriptome Replicates",
+        xlab = "log10(Abundance)",
+        ylab = "log10(Abundance)",
+        columnLabels = c("Rep 1", "Rep2","Rep 3", "Rep 4"),
+        upper = list(continuous = wrap('cor', size = 5)),
+        lower=list(continuous="smooth"))+
+  theme_bw()
+b
+
+
+ggsave("Control_global_rna_ggpair_correlation.png", a, device = "png", width = 7, height = 7)
+ggsave("DZNep_global_rna_ggpair_correlation.png", b, device = "png", width = 7, height = 7)
+
+```
+
+# GO Term analysis
+```{r}
+library(dplyr)
+library(org.Hs.eg.db)
+library(clusterProfiler)
+library(ggplot2)
+
+rna_up<- rna_seq_2%>%
+  filter(gene_type =="up")
+
+rna_down<- rna_seq_2%>%
+  filter(gene_type == "down")
+```
+
+```{r}
+go_enrich<- function(x){
+gene<- x$ENSEMBLE
+genes<-AnnotationDbi::select(org.Hs.eg.db, gene, "ENTREZID", "ENSEMBL")
+print("done mapping")
+genes<- na.omit(genes)
+genes_ID<- genes$ENTREZID
+print("Ready to enrich")
+return(genes_ID)
+}
+
+# First convert the proteome to ENTREZ
+pisa_hits_go<- go_enrich(rna_seq_2)
+pisa_hits_go<- pisa_hits_go[!duplicated(pisa_hits_go)]
+
+#Stabilized proteins
+rna_down_go<- go_enrich(rna_down)
+rna_down_go<- rna_down_go[!duplicated(rna_down_go)]
+## GO Term
+rna_down_go_enriched<- enrichGO(rna_down_go,
+                                   OrgDb = "org.Hs.eg.db", 
+                                   ont="all", 
+                                   universe =pisa_hits_go,
+                                   pAdjustMethod = "none")
+rna_down_go_enriched_df<- as.data.frame(rna_down_go_enriched)
+rna_down_go_enricheddot<-dotplot(rna_down_go_enriched, split="ONTOLOGY")+
+  facet_grid(ONTOLOGY~., scale="free")+
+  scale_fill_continuous(limits=c(0,0.001))+ scale_y_discrete(labels=function(x) str_wrap(x, width=47))
+rna_down_go_enricheddot
+
+
+
+write.csv(rna_down_go_enriched_df, "rna_down_Go_enrichment.csv")
+ggsave(rna_down_go_enricheddot, file= "rna_down_GO_terms.eps", device = "eps", width = 7, height = 10)
+
+
+# Upregulated RNA
+rna_up_go<- go_enrich(rna_up)
+rna_up_go<- rna_up_go[!duplicated(rna_up_go)]
+
+rna_up_go_enriched<- enrichGO(rna_up_go,
+                                   OrgDb = "org.Hs.eg.db", 
+                                   ont="all", 
+                                   universe =pisa_hits_go,
+                                   pAdjustMethod = "none")
+rna_up_go_enriched_df<- as.data.frame(rna_up_go_enriched)
+rna_up_go_enricheddot<-dotplot(rna_up_go_enriched, split="ONTOLOGY")+
+  facet_grid(ONTOLOGY~., scale="free")+
+  scale_fill_continuous(limits=c(0,0.05))+ scale_y_discrete(labels=function(x) str_wrap(x, width=49))
+rna_up_go_enricheddot
+
+
+write.csv(rna_up_go_enriched_df, "rna_up_Go_enrichment.csv")
+ggsave(rna_up_go_enricheddot, file= "rna_up_GO_terms.eps", device = "eps", width = 7.75, height = 10)
+```
+
+
+
+# Analysis of interactions between RNA seq, Proteome, and PISA data
+## Upset plot 
+```{r Separating out the different results}
+up_deg<- rna_pisa_df_2%>%
+  filter(log2FoldChange >=1,padj <= 0.05 )
+
+down_deg<- rna_pisa_df_2%>%
+  filter(log2FoldChange <=-1,padj <= 0.05 )
+
+g_up<- rna_pisa_df_2%>%
+  filter(protein_type == "Up with DZNep")
+
+g_down<- rna_pisa_df_2%>%
+  filter(protein_type == "Down with DZNep")
+
+p_stab<- rna_pisa_df_2%>%
+  filter(protein_type.pisa == "Stabilized with DZNep")
+
+p_destab<- rna_pisa_df_2%>%
+  filter(protein_type.pisa == "Destabilized with DZNep")
+
+```
+
+```{r}
+listInput<- list(Abundance_Increased=g_up$ID,
+                  Abundance_Decreased=g_down$ID,
+                  Thermally_Stabilized=p_stab$ID,
+                  Thermally_Destabilized=p_destab$ID,
+                  Upregulated_mRNA = up_deg$ID,
+                  Downregulated_mRNA = down_deg$ID)
+
+
+svg("RNA and PISA and global.svg", width=10, height= 6)
+upset(fromList(listInput),nsets = 8, nintersects = NA, order.by = "freq",sets.bar.color = "#56B4E9", text.scale = 2)
+dev.off()
+
+```
+
+
+```{r determining the overlapping numbers}
+
+table(rna_pisa_df_2$protein_type.pisa, rna_pisa_df_2$gene_type)
+table(rna_pisa_df_2$protein_type, rna_pisa_df_2$gene_type)
+
+
+```
+
+
+## Pearson correlation of Protein and Transcript values
+```{r Correlation between transcript and global  FC}
+
+a<-ggplot(rna_pisa_df_2, aes(log2(FC_global), log2FoldChange), method = "lm")+
+  geom_hex(bins = 50)+
+    labs(
+       y="log2 Global Abundance (DZNep/Control)", 
+       x="log2 mRNA expression (DZNep/Control",
+       title = "Correlation between Global Abundance and mRNA expression")+
+  stat_cor(method = "pearson")+
+  stat_smooth(method = "lm",
+              formula = y~x,
+              geom= "smooth",
+              color = "black")+
+  scale_fill_continuous(type = "viridis",
+                        breaks = c(1,25,50,75,100, 117)) +
+  theme_classic()
+
+a
+
+ggsave("Global vs mRNA correlation_hex.eps", a, device = "eps", width =5, height = 5)
+```
+
+## Venn Diagrams looking at the overlap between protein and transcription changes
+
+```{r separating out files that are up or down}
+
+up_protein<- rna_pisa_df_2%>%
+  filter(protein_type == "Up with DZNep")
+
+down_protein<- rna_pisa_df_2%>%
+  filter(protein_type == "Down with DZNep")
+
+up_rna<- rna_pisa_df_2 %>%
+  filter(gene_type == "up")
+
+down_rna<- rna_pisa_df_2 %>%
+  filter(gene_type =="down")
+
+```
+
+
+```{r ggvenn}
+up<- list(Increased.Protein = up_protein$Accession,
+         Increased.RNA=up_rna$Accession)
+
+
+down<- list(Decreased.Protein= down_protein$Accession,
+            Decreased.RNA = down_rna$Accession)
+
+```
+```{r}
+a<-ggvenn(
+  up,
+  set_name_size = 5,
+  stroke_size = 1,
+  fill_color = c("red","#868686FF"),
+  text_size = 4,
+  fill_alpha = 0.7
+)
+a
+
+b<-ggvenn(
+  down,
+  set_name_size = 5,
+  stroke_size = 1,
+  fill_color = c("#0073C2FF","#868686FF"),
+  text_size = 4,
+  fill_alpha = 0.7
+)
+b
+
+
+
+ggsave("Increased protein and rna Venn Diagram.tiff", a, device = "tiff")
+ggsave("Decreased protein and rna Venn Diagram.png", b, device = "png")
+
+```
+

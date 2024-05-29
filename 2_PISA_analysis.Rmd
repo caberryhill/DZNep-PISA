@@ -1,0 +1,98 @@
+---
+title: "Protein PISA Analysis"
+author: "Christine Berryhill"
+date: "2023-01-25"
+output: html_document
+---
+```{r}
+# Spread sheet generated from proteome analysis.Rmd
+pisa_work<-read.csv("Inputs/Protome_global_changes.csv")
+```
+
+```{r}
+library(tidyverse)
+library(ggpubr)
+library(dplyr)
+```
+
+
+#Normalizing the PISA levels to the global abudances. Essentially getting percentages or FC of PISA relative to global
+```{r}
+
+pisa_work$cont_pisa_rep1_norm<- pisa_work$Cont_PISA_Rep1/pisa_work$Cont_Global_Rep1
+pisa_work$cont_pisa_rep2_norm<- pisa_work$Cont_PISA_Rep2/pisa_work$Cont_Global_Rep2
+pisa_work$cont_pisa_rep3_norm<- pisa_work$Cont_PISA_Rep3/pisa_work$Cont_Global_Rep3
+pisa_work$cont_pisa_rep4_norm<- pisa_work$Cont_PISA_Rep4/pisa_work$Cont_Global_Rep4
+
+
+pisa_work$dznep_pisa_rep1_norm<- pisa_work$DZNep_PISA_Rep1/pisa_work$DZNep_Global_Rep1
+pisa_work$dznep_pisa_rep2_norm<- pisa_work$DZNep_PISA_Rep2/pisa_work$DZNep_Global_Rep2
+pisa_work$dznep_pisa_rep3_norm<- pisa_work$DZNep_PISA_Rep3/pisa_work$DZNep_Global_Rep3
+pisa_work$dznep_pisa_rep4_norm<- pisa_work$DZNep_PISA_Rep4/pisa_work$DZNep_Global_Rep4
+
+
+
+pisa_work$rep1_sm<- pisa_work$dznep_pisa_rep1_norm/pisa_work$cont_pisa_rep1_norm
+pisa_work$rep2_sm<- pisa_work$dznep_pisa_rep2_norm/pisa_work$cont_pisa_rep2_norm
+pisa_work$rep3_sm<- pisa_work$dznep_pisa_rep3_norm/pisa_work$cont_pisa_rep3_norm
+pisa_work$rep4_sm<- pisa_work$dznep_pisa_rep4_norm/pisa_work$cont_pisa_rep4_norm
+
+
+#determining the mean and sd of the normalized abundances
+pisa_work$pisa_sm_mean<- rowMeans(pisa_work[,36:39])
+pisa_work$pisa_sm_sd<- apply(pisa_work[,36:39],1,sd)
+
+pisa_work<- na.omit(pisa_work)
+
+#0 sites dropped
+library(tidyverse)
+
+pisa_work<- pisa_work%>%
+  rowwise() %>%
+  mutate(pval.pisa = t.test(c(cont_pisa_rep1_norm, cont_pisa_rep2_norm, cont_pisa_rep3_norm, cont_pisa_rep4_norm),
+                       c(dznep_pisa_rep1_norm, dznep_pisa_rep2_norm, dznep_pisa_rep3_norm, dznep_pisa_rep4_norm))$p.value)%>%
+  ungroup()
+
+pisa_work$log10.pvalue_pisa<- -log10(pisa_work$pval.pisa)
+
+#pisa_work$p.adjust.pisa<- p.adjust(pisa_work$pval.pisa, method = "BH")
+
+
+#desginating when something is up or down
+
+pisa_work<- pisa_work%>%
+  mutate(protein_type.pisa= case_when(pisa_sm_mean > 1& log10.pvalue_pisa >=1.3 ~ "Stabilized with DZNep",
+                                 pisa_sm_mean <= 1 & log10.pvalue_pisa >= 1.3 ~"Destabilized with DZNep",
+                                 TRUE ~ "ns"))
+
+#obtain protein counts
+
+pisa_work%>%
+  count(protein_type.pisa)
+
+table(pisa_work$protein_type, pisa_work$protein_type.pisa)
+```
+# Integrating genes names with Uniprot IDs
+```{r}
+library(org.Hs.eg.db)
+
+gene.symbol<-mapIds(org.Hs.eg.db, 
+                keys=pisa_work$Accession, 
+                column="SYMBOL", 
+                keytype="UNIPROT", 
+                multiVals="first")
+pisa_work$Gene.Name<- gene.symbol
+
+
+```
+
+
+```{r writing csv}
+#write.csv(pisa_work, "PISA_global_changes.csv")
+
+```
+
+
+
+
+

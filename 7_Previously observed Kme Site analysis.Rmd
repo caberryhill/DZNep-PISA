@@ -1,0 +1,200 @@
+---
+title: "Methylated proteins and Readers Analysis"
+author: "Christine Berryhill"
+date: "2023-01-27"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#All previously observed data, from both PhosphoSite Plus and Berryhill et al. 2023
+all_kme<- read.csv("Inputs/all_kme_data.csv")
+#Spread sheet of all Kme sites detected. Generated from methyl_values.Rmd
+pisa_kme<- read.csv("Inputs/pisa_methylsites.csv")
+#Spread sheet of Protein and PISA Kme values. Generated from Kme PISA analysis.Rmd
+pisa_kme_quant<- read.csv("Inputs/Kme_PISA_global_changes.csv")
+
+library(dplyr)
+library(ggplot2)
+library(stringr)
+
+
+all_kme$Accession<- sub("\\-.*", "", all_kme$Format2)
+y<- as.vector(all_kme$Accession)
+y<- unique(y)
+
+pisa_kme_vec<- as.vector(pisa_kme$Master.Protein.Accessions)
+pisa_kme_quant_vec<- as.vector(pisa_kme_quant$Accession)
+
+#Making new columns with all this data
+## Adding to the protein pisa df. Adding annotation columns stating if the protein has ever been observed methylated, are methylated in this dataset, or have a quantified Kme site in this dataset
+pisa_hits<- pisa_hits%>%
+  mutate(all_kme = ifelse(Accession %in% y, "methylated", ""))
+
+pisa_hits<- pisa_hits%>%
+  mutate(kme_detect = ifelse(Accession %in% pisa_kme_vec, "methylated_detect", ""))
+
+pisa_hits<- pisa_hits%>%
+  mutate(kme_quant = ifelse(Accession %in% pisa_kme_quant_vec, "methylated_quant", ""))
+
+```
+
+```{r}
+write.csv(pisa_hits, "Total workup of pisa data.csv")
+```
+
+# Basic Kme info
+## Extracting how many unique proteins there are from the detected and quantified
+
+```{r}
+
+length(unique(pisa_kme$U1))
+length(unique(pisa_kme$Format3))
+
+length(unique(pisa_kme_quant$U1))
+length(unique(pisa_kme_quant$Format3))
+
+```
+
+## Determining how many of each methyl state there were
+
+```{r}
+#Detected
+detect.table<- as.data.frame(table(pisa_kme$Methyl_state))
+detect.table$percent<- (detect.table$Freq/sum(detect.table$Freq))*100
+
+#Quantified
+quant.table<- as.data.frame(table(pisa_kme_quant$Methyl_state))
+quant.table$percent<- (quant.table$Freq/sum(quant.table$Freq))*100
+
+
+```
+
+
+# Chi square of methylated in total and methylated in this data set (detected)
+
+#Grabbing random number of proteins, same as methylated sites
+```{r}
+sample<- pisa_hits[sample(nrow(pisa_hits),1631),]
+sample<- as.vector(sample$Accession)
+
+pisa_hits<- pisa_hits%>%
+  mutate(random_sample = ifelse(Accession %in% sample, "random", ""))
+
+```
+
+#Performing chi square
+```{r}
+print.chi<- function(x){ print(x)
+  print("Expected") 
+  print(x$expected) 
+  print("Observed")
+  print(x$observed) 
+  print ("Residual")
+  print(x$residual)}
+
+chi.a<-chisq.test(table(pisa_hits$protein_type, pisa_hits$all_kme))
+chi.b<-chisq.test(table(pisa_hits$protein_type.pisa, pisa_hits$all_kme))
+chi.c<-chisq.test(table(pisa_hits$protein_type, pisa_hits$kme_detect))
+chi.d<-chisq.test(table(pisa_hits$protein_type.pisa, pisa_hits$kme_detect))
+chi.e<-chisq.test(table(pisa_hits$protein_type.pisa, pisa_hits$kme_quant))
+chi.f<-chisq.test(table(pisa_hits$protein_type.pisa, pisa_hits$kme_quant))
+chi.g<-chisq.test(table(pisa_hits$protein_type, pisa_hits$random_sample))
+chi.h<-chisq.test(table(pisa_hits$protein_type.pisa, pisa_hits$random_sample))
+
+print.chi(chi.a)
+print.chi(chi.b)
+print.chi(chi.c)
+print.chi(chi.d)
+print.chi(chi.e)
+print.chi(chi.f)
+print.chi(chi.g)
+print.chi(chi.h)
+
+library(ggstatsplot)
+```
+
+
+```{r}
+a<-ggbarstats(
+  data = pisa_hits,
+  x = protein_type,
+  y = all_kme,
+  package = "ggsci",
+  palette = "default_jco"
+) +
+  labs(caption = NULL)
+b<-ggbarstats(
+  data = pisa_hits,
+  x = protein_type.pisa,
+  y = all_kme,
+  package = "ggsci",
+  palette = "default_jco"
+) +
+  labs(caption = NULL)
+
+
+c<-ggbarstats(
+  data = pisa_hits,
+  x = protein_type,
+  y = kme_detect,
+  package = "ggsci",
+  palette = "default_jco"
+) +
+  labs(caption = NULL)
+d<-ggbarstats(
+  data = pisa_hits,
+  x = protein_type.pisa,
+  y = kme_detect,
+  package = "ggsci",
+  palette = "default_jco"
+) +
+  labs(caption = NULL)
+
+e<-ggbarstats(
+  data = pisa_hits,
+  x = protein_type,
+  y = kme_quant,
+  package = "ggsci",
+  palette = "default_jco"
+) +
+  labs(caption = NULL)
+f<-ggbarstats(
+  data = pisa_hits,
+  x = protein_type.pisa,
+  y = kme_quant,
+  package = "ggsci",
+  palette = "default_jco"
+) +
+  labs(caption = NULL)
+
+g<-ggbarstats(
+  data = pisa_hits,
+  x = protein_type,
+  y = random_sample,
+  package = "ggsci",
+  palette = "default_jco"
+) +
+  labs(caption = NULL)
+
+h<-ggbarstats(
+  data = pisa_hits,
+  x = protein_type.pisa,
+  y = random_sample,
+  package = "ggsci",
+  palette = "default_jco"
+) +
+  labs(caption = NULL)
+
+
+ggsave("All methylated protein abundance.eps", a, device = "eps", width = 6, height = 6)
+ggsave("All methylated pisa abundance.eps", b, device = "eps", width = 6, height = 6)
+ggsave("Random sample protein abundance.eps",g, device = "eps", width = 6, height = 6)
+ggsave("Random Sample pisa abundance.eps", h, device = "eps", width = 6, height = 6)
+
+```
+
+

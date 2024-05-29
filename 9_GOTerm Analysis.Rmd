@@ -1,0 +1,261 @@
+---
+title: "PISA Go Terms"
+author: "Christine Berryhill"
+date: "2023-01-27"
+output: html_document
+---
+# Cluster Profiler for all methylated proteins
+
+
+```{r}
+library(stringr)
+library(ggplot2)
+library(dplyr)
+library(forcats)
+library(ggpubr)
+library(clusterProfiler)
+library(org.Hs.eg.db)
+
+
+kme_pisa<- read.csv("/home/cberry/Documents/PISA_Analysis/Analysis/Kme_PISA_global_changes.csv")
+
+all_kme<- read.csv("/home/cberry/Documents/PISA_Analysis/Analysis/all_kme_data.csv")
+
+all_kme$Accession<- sub("\\-.*", "", all_kme$Format2)
+
+y<- as.vector(all_kme$Accession)
+
+y<- unique(y)
+```
+
+```{r running function and analysis}
+
+go_enrich<- function(x){
+
+gene<- x$Accession
+ 
+genes<-select(org.Hs.eg.db, gene, "ENTREZID", "UNIPROT")
+
+print("done mapping")
+
+genes<- na.omit(genes)
+
+genes_ID<- genes$ENTREZID
+
+print("Ready to enrich")
+
+return(genes_ID)
+}
+```
+
+```{r Kme_PISA}
+kme_pisa_go<- go_enrich(kme_pisa)
+
+kme_pisa_go<- kme_pisa_go[!duplicated(kme_pisa_go)]
+
+kme_pisa_go_enriched<- enrichGO(kme_pisa_go,OrgDb = "org.Hs.eg.db", ont="all")
+
+kme_pisa_go_enriched_dot<-dotplot(kme_pisa_go_enriched, split="ONTOLOGY")+
+  facet_grid(ONTOLOGY~., scale="free")+
+  scale_fill_continuous(limits=c(0,1))
+
+kme_pisa_go_enriched_dot
+
+ggsave(kme_pisa_go_enriched_dot, file= "Kme_PISA_GO_terms.eps", device = "eps", width = 6, height = 15)
+
+kme_pisa_go_enriched_df<- as.data.frame(kme_pisa_go_enriched)
+
+write.csv(kme_pisa_go_enriched_df, "Kme_PISA_Go_enrichment.csv")
+```
+
+```{r All Kme ever}
+all_kme_go<- go_enrich(all_kme)
+
+all_kme_go<- all_kme_go[!duplicated(all_kme_go)]
+
+all_kme_go_enriched<- enrichGO(all_kme_go,OrgDb = "org.Hs.eg.db", ont="all")
+
+all_kme_go_enriched_dot<-dotplot(all_kme_go_enriched, split="ONTOLOGY")+
+  facet_grid(ONTOLOGY~., scale="free")+
+  scale_fill_continuous(limits=c(0,1))
+
+all_kme_go_enriched_dot
+
+ggsave(all_kme_go_enriched_dot, file= "all_Kme_PISA_GO_terms.eps", device = "eps", width = 6, height = 15)
+
+all_kme_go_enriched_df<- as.data.frame(all_kme_go_enriched)
+
+write.csv(all_kme_go_enriched_df, "Kme_PISA_Go_enrichment.csv")
+```
+
+#Cluster Profilier for proteome analysis
+```{r}
+library(dplyr)
+library(org.Hs.eg.db)
+library(clusterProfiler)
+library(ggplot2)
+# Generated from Previously observed Kme Site analysis
+pisa_hits<- read.csv("/home/cberry/Documents/PISA_Analysis/Analysis/Total workup of pisa data.csv")
+
+pisa_stable<- pisa_hits%>%
+  filter(protein_type.pisa == "Stabilized with DZNep")
+
+pisa_destable<- pisa_hits%>%
+  filter(protein_type.pisa == "Destabilized with DZNep")
+
+pisa_up<- pisa_hits%>%
+  filter(protein_type == "Up with DZNep")
+
+pisa_down<- pisa_hits%>%
+  filter(protein_type == "Down with DZNep")
+```
+
+```{r running function and analysis}
+
+go_enrich<- function(x){
+gene<- x$Accession
+genes<-AnnotationDbi::select(org.Hs.eg.db, gene, "ENTREZID", "UNIPROT")
+print("done mapping")
+genes<- na.omit(genes)
+genes_ID<- genes$ENTREZID
+print("Ready to enrich")
+return(genes_ID)
+}
+
+# First convert the proteome to ENTREZ
+pisa_hits_go<- go_enrich(pisa_hits)
+pisa_hits_go<- pisa_hits_go[!duplicated(pisa_hits_go)]
+
+#Stabilized proteins
+pisa_stable_go<- go_enrich(pisa_stable)
+pisa_stable_go<- pisa_stable_go[!duplicated(pisa_stable_go)]
+## GO Term
+pisa_stable_go_enriched<- enrichGO(pisa_stable_go,
+                                   OrgDb = "org.Hs.eg.db", 
+                                   ont="all", 
+                                   universe =pisa_hits_go,
+                                   pAdjustMethod = "none")
+
+pisa_stable_go_enriched_df<- as.data.frame(pisa_stable_go_enriched)
+pisa_stable_go_enriched_dot<-dotplot(pisa_stable_go_enriched, split="ONTOLOGY")+
+  facet_grid(ONTOLOGY~., scale="free")+ scale_y_discrete(labels=function(x) str_wrap(x, width=47))
+  scale_fill_continuous(limits=c(0.0009,0.005))
+pisa_stable_go_enriched_dot
+
+## KEGG Term
+pisa_stable_kegg<- enrichKEGG(pisa_stable_go,
+                                universe = pisa_hits_go,
+                               organism = "hsa",
+                               pAdjustMethod = "none")
+
+pisa_stable_keg.df<- as.data.frame(pisa_stable_kegg)
+pisa_stable_kegg_enriched_dot<-dotplot(pisa_stable_kegg,)
+pisa_stable_kegg_enriched_dot
+
+
+write.csv(pisa_stable_go_enriched_df, "pisa_stable_Go_enrichment.csv")
+write.csv(pisa_stable_keg.df, "pisa_stable_kegg_enrichment.csv")
+ggsave(pisa_stable_go_enriched_dot, file= "pisa_stable_GO_terms.eps", device = "eps", width = 6, height = 10)
+ggsave(pisa_stable_kegg_enriched_dot, file= "pisa_stable_KEGG_terms.eps", device = "eps", width =6, height = 10)
+
+#Destabilized proteins
+pisa_destable_go<- go_enrich(pisa_destable)
+pisa_destable_go<- pisa_destable_go[!duplicated(pisa_destable_go)]
+## GO Term
+pisa_destable_go_enriched<- enrichGO(pisa_destable_go,
+                                   OrgDb = "org.Hs.eg.db", 
+                                   ont="all", 
+                                   universe =pisa_hits_go,
+                                   pAdjustMethod = "none")
+pisa_destable_go_enriched_df<- as.data.frame(pisa_destable_go_enriched)
+pisa_destable_go_enriched_dot<-dotplot(pisa_destable_go_enriched, split="ONTOLOGY")+
+  facet_grid(ONTOLOGY~., scale="free")
+pisa_destable_go_enriched_dot
+
+## KEGG Term
+pisa_destable_kegg<- enrichKEGG(pisa_destable_go,
+                                universe = pisa_hits_go,
+                               organism = "hsa",
+                               pAdjustMethod = "none")
+
+pisa_destable_keg.df<- as.data.frame(pisa_destable_kegg)
+pisa_destable_kegg_enriched_dot<-dotplot(pisa_destable_kegg,)
+pisa_destable_kegg_enriched_dot
+
+
+write.csv(pisa_destable_go_enriched_df, "pisa_destable_Go_enrichment.csv")
+write.csv(pisa_destable_keg.df, "pisa_destable_kegg_enrichment.csv")
+ggsave(pisa_destable_go_enriched_dot, file= "pisa_destable_GO_terms.eps", device = "eps", width = 6, height = 10)
+ggsave(pisa_destable_kegg_enriched_dot, file= "pisa_stable_KEGG_terms.eps", device = "eps", width = 6, height = 10)
+
+
+#Less Abundance proteins
+pisa_down_go<- go_enrich(pisa_down)
+pisa_down_go<- pisa_down_go[!duplicated(pisa_down_go)]
+## GO Term
+pisa_down_go_enriched<- enrichGO(pisa_down_go,
+                                   OrgDb = "org.Hs.eg.db", 
+                                   ont="all", 
+                                   universe =pisa_hits_go,
+                                   pAdjustMethod = "none")
+pisa_down_go_enriched_df<- as.data.frame(pisa_down_go_enriched)
+pisa_down_go_enriched_dot<-dotplot(pisa_down_go_enriched, split="ONTOLOGY")+
+  facet_grid(ONTOLOGY~., scale="free")+
+  scale_fill_continuous(limits=c(0,0.001))+ scale_y_discrete(labels=function(x) str_wrap(x, width=47))
+pisa_down_go_enriched_dot
+
+## KEGG Term
+pisa_down_kegg<- enrichKEGG(pisa_down_go,
+                                universe = pisa_hits_go,
+                               organism = "hsa",
+                               pAdjustMethod = "none")
+
+pisa_down_kegg.df<- as.data.frame(pisa_down_kegg)
+pisa_down_kegg_enriched_dot<-dotplot(pisa_down_kegg,)
+pisa_down_kegg_enriched_dot
+
+
+write.csv(pisa_down_go_enriched_df, "pisa_down_Go_enrichment.csv")
+write.csv(pisa_down_kegg.df, "pisa_down_kegg_enrichment.csv")
+ggsave(pisa_down_go_enriched_dot, file= "pisa_down_GO_terms.eps", device = "eps", width = 7, height = 10)
+ggsave(pisa_down_kegg_enriched_dot, file= "pisa_downe_KEGG_terms.eps", device = "eps", width = 6, height = 10)
+
+
+#More Abundance proteins
+pisa_up_go<- go_enrich(pisa_up)
+pisa_up_go<- pisa_up_go[!duplicated(pisa_up_go)]
+## GO Term
+pisa_up_go_enriched<- enrichGO(pisa_up_go,
+                                   OrgDb = "org.Hs.eg.db", 
+                                   ont="all", 
+                                   universe =pisa_hits_go,
+                                   pAdjustMethod = "none")
+pisa_up_go_enriched_df<- as.data.frame(pisa_up_go_enriched)
+pisa_up_go_enriched_dot<-dotplot(pisa_up_go_enriched, split="ONTOLOGY")+
+  facet_grid(ONTOLOGY~., scale="free")+theme(axis.text = element_text(size=0.01))+ theme(text = element_text(family = "Arial"))+
+  scale_fill_continuous(limits=c(0,0.001))+ scale_y_discrete(labels=function(x) str_wrap(x, width=48))
+pisa_up_go_enriched_dot
+
+## KEGG Term
+pisa_up_kegg<- enrichKEGG(pisa_up_go,
+                                universe = pisa_hits_go,
+                               organism = "hsa",
+                               pAdjustMethod = "none")
+
+pisa_up_kegg.df<- as.data.frame(pisa_up_kegg)
+pisa_up_kegg_enriched_dot<-dotplot(pisa_up_kegg,)
+pisa_up_kegg_enriched_dot
+
+
+write.csv(pisa_up_go_enriched_df, "pisa_up_Go_enrichment.csv")
+write.csv(pisa_up_kegg.df, "pisa_up_kegg_enrichment.csv")
+ggsave(pisa_up_go_enriched_dot, file= "pisa_up_GO_terms.eps", device = "eps", width = 7.75,height = 10)
+ggsave(pisa_up_kegg_enriched_dot, file= "pisa_up_KEGG_terms.eps", device = "eps", width = 6, height = 10)
+
+
+
+```
+
+
+
+

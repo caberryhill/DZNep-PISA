@@ -1,0 +1,175 @@
+# Analyzing the methylated sites/peptides pisa ratios
+
+```{r setting up Kme spreadsheet}
+
+
+kme_sites<- read.csv("Inputs/pisa_methylsites.csv")
+kme_sites<- na.omit(kme_sites) #371 sites
+protein<- read.csv("Inputs/PISA_global_changes.csv")
+#Add pseudo count
+
+v2_kme_sites<- kme_sites[,c(24:39)]
+added<- kme_sites[c(5,45,49:51)]
+
+v2_kme_sites<- v2_kme_sites +0.1
+v2_kme_sites<- cbind(v2_kme_sites, added)
+
+v2_kme_sites<- v2_kme_sites[,c(17,1:16,18:21)]
+
+colnames(v2_kme_sites)<- c("Accession", "Cont_Global_Rep1",
+                        "Cont_Global_Rep2",
+                        "Cont_Global_Rep3",
+                        "Cont_Global_Rep4",
+                        "Cont_PISA_Rep1",
+                       "Cont_PISA_Rep2",
+                       "Cont_PISA_Rep3",
+                       "Cont_PISA_Rep4",
+                      "DZNep_Global_Rep1",
+                       "DZNep_Global_Rep2",
+                       "DZNep_Global_Rep3",
+                       "DZNep_Global_Rep4",
+                       "DZNep_PISA_Rep1",
+                       "DZNep_PISA_Rep2",
+                       "DZNep_PISA_Rep3",
+                       "DZNep_PISA_Rep4",
+                      "U1",
+                      "Methyl_state",
+                      "Format2",
+                      "Format3")
+                      
+
+#Adding in the global values for global normalization
+
+y<- as.vector(v2_kme_sites$U1)
+
+y<- y[!duplicated(y)]
+
+x<- protein[protein$Accession %in% y,] 
+
+u<- y[!y %in% protein$Accession] #Number of methylated proteins that didn't make the cutoff at the protein level: 58
+
+v2_kme_sites$Format4<- paste0(v2_kme_sites$Format3, "-",rownames(v2_kme_sites))
+
+pisa_kme_norm<- inner_join(v2_kme_sites, x, by = "Accession") #282 sites out of 371 have proteins with cutoff
+
+
+
+#Normalizing the global peptide to the global protein
+pisa_kme_norm$DZNep_Kme_global_Norm_rep1<- pisa_kme_norm$DZNep_Global_Rep1.x/pisa_kme_norm$DZNep_Global_Rep1.y
+pisa_kme_norm$DZNep_Kme_global_Norm_rep2<- pisa_kme_norm$DZNep_Global_Rep2.x/pisa_kme_norm$DZNep_Global_Rep2.y
+pisa_kme_norm$DZNep_Kme_global_Norm_rep3<- pisa_kme_norm$DZNep_Global_Rep3.x/pisa_kme_norm$DZNep_Global_Rep3.y
+pisa_kme_norm$DZNep_Kme_global_Norm_rep4<- pisa_kme_norm$DZNep_Global_Rep4.x/pisa_kme_norm$DZNep_Global_Rep4.y
+
+pisa_kme_norm$Cont_Kme_global_Norm_rep1<- pisa_kme_norm$Cont_Global_Rep1.x/pisa_kme_norm$Cont_Global_Rep1.y
+pisa_kme_norm$Cont_Kme_global_Norm_rep2<- pisa_kme_norm$Cont_Global_Rep2.x/pisa_kme_norm$Cont_Global_Rep2.y
+pisa_kme_norm$Cont_Kme_global_Norm_rep3<- pisa_kme_norm$Cont_Global_Rep3.x/pisa_kme_norm$Cont_Global_Rep3.y
+pisa_kme_norm$Cont_Kme_global_Norm_rep4<- pisa_kme_norm$Cont_Global_Rep4.x/pisa_kme_norm$Cont_Global_Rep4.y
+
+#Getting rid of the Global proteome values
+
+pisa_kme_norm<-pisa_kme_norm[,-c(23:40,50:57)]
+
+#filtering out sites that have a Normalized Kme peptide abudnace of 1, which means it's the sole peptide responsible for the protien abundance
+pisa_kme_norm<- pisa_kme_norm%>%
+  filter_at(vars(DZNep_Kme_global_Norm_rep1), all_vars(.!=1))
+
+```
+
+# Calculating FC and PISA values 
+```{r }
+
+#FC global using protein Normalized values
+pisa_kme_norm$Norm_FC_global_rep1<- pisa_kme_norm$DZNep_Kme_global_Norm_rep1/pisa_kme_norm$Cont_Kme_global_Norm_rep1
+pisa_kme_norm$Norm_FC_global_rep2<- pisa_kme_norm$DZNep_Kme_global_Norm_rep2/pisa_kme_norm$Cont_Kme_global_Norm_rep2
+pisa_kme_norm$Norm_FC_global_rep3<- pisa_kme_norm$DZNep_Kme_global_Norm_rep3/pisa_kme_norm$Cont_Kme_global_Norm_rep3
+pisa_kme_norm$Norm_FC_global_rep4<- pisa_kme_norm$DZNep_Kme_global_Norm_rep4/pisa_kme_norm$Cont_Kme_global_Norm_rep4
+
+#PISA Normalized to the raw Kme global values
+pisa_kme_norm$kme_cont_pisa_rep1_norm<- pisa_kme_norm$Cont_PISA_Rep1/pisa_kme_norm$Cont_Global_Rep1
+pisa_kme_norm$kme_cont_pisa_rep2_norm<- pisa_kme_norm$Cont_PISA_Rep2/pisa_kme_norm$Cont_Global_Rep2
+pisa_kme_norm$kme_cont_pisa_rep3_norm<- pisa_kme_norm$Cont_PISA_Rep3/pisa_kme_norm$Cont_Global_Rep3
+pisa_kme_norm$kme_cont_pisa_rep4_norm<- pisa_kme_norm$Cont_PISA_Rep4/pisa_kme_norm$Cont_Global_Rep4
+pisa_kme_norm$kme_dznep_pisa_rep1_norm<- pisa_kme_norm$DZNep_PISA_Rep1/pisa_kme_norm$DZNep_Global_Rep1
+pisa_kme_norm$kme_dznep_pisa_rep2_norm<- pisa_kme_norm$DZNep_PISA_Rep2/pisa_kme_norm$DZNep_Global_Rep2
+pisa_kme_norm$kme_dznep_pisa_rep3_norm<- pisa_kme_norm$DZNep_PISA_Rep3/pisa_kme_norm$DZNep_Global_Rep3
+pisa_kme_norm$kme_dznep_pisa_rep4_norm<- pisa_kme_norm$DZNep_PISA_Rep4/pisa_kme_norm$DZNep_Global_Rep4
+
+#PISA FC
+pisa_kme_norm$kme_rep1_sm<- pisa_kme_norm$kme_dznep_pisa_rep1_norm/pisa_kme_norm$kme_cont_pisa_rep1_norm
+pisa_kme_norm$kme_rep2_sm<- pisa_kme_norm$kme_dznep_pisa_rep2_norm/pisa_kme_norm$kme_cont_pisa_rep2_norm
+pisa_kme_norm$kme_rep3_sm<- pisa_kme_norm$kme_dznep_pisa_rep3_norm/pisa_kme_norm$kme_cont_pisa_rep3_norm
+pisa_kme_norm$kme_rep4_sm<- pisa_kme_norm$kme_dznep_pisa_rep4_norm/pisa_kme_norm$kme_cont_pisa_rep4_norm
+
+
+
+```
+
+# Caluculating significant sites
+
+```{r Calculating log10FC and BH adjusted P value using t test from raw values}
+
+#determining the mean and sd of the FC of the Global Kme abundances
+pisa_kme_norm$Norm_Global_Kme_FC_mean<- rowMeans(pisa_kme_norm[,50:53])
+pisa_kme_norm$Norm_Global_Kme_FC_sd<- apply(pisa_kme_norm[,50:53],1,sd)
+
+pisa_kme_norm<- na.omit(pisa_kme_norm)
+
+#0 sites dropped
+library(tidyverse)
+
+pisa_kme_norm<- pisa_kme_norm%>%
+  rowwise() %>%
+  mutate(Norm.global.kme.pval = t.test(c(Cont_Kme_global_Norm_rep1, Cont_Kme_global_Norm_rep2, Cont_Kme_global_Norm_rep3, Cont_Kme_global_Norm_rep4),
+                       c(DZNep_Kme_global_Norm_rep1, DZNep_Kme_global_Norm_rep2, DZNep_Kme_global_Norm_rep3, DZNep_Kme_global_Norm_rep4))$p.value)%>%
+  ungroup()
+
+
+pisa_kme_norm<- pisa_kme_norm%>%
+  mutate(Norm_global_kme_protein_type= case_when(Norm_Global_Kme_FC_mean > 1& Norm.global.kme.pval <=0.05 ~ "Norm.Up with DZNep",
+                                 Norm_Global_Kme_FC_mean <= 1 & Norm.global.kme.pval <= 0.05 ~"Norm.Down with DZNep",
+                                 TRUE ~ "ns"))
+
+
+
+#determining the mean and sd of the normalized PISA sm
+pisa_kme_norm$kme.pisa.sm.mean<- rowMeans(pisa_kme_norm[,62:65])
+pisa_kme_norm$kme.pisa.sm.sd<- apply(pisa_kme_norm[,62:65],1,sd)
+
+pisa_kme_norm<- na.omit(pisa_kme_norm)
+
+#0 sites dropped
+library(tidyverse)
+
+pisa_kme_norm<- pisa_kme_norm%>%
+  rowwise() %>%
+  mutate(kme.pisa.pval = t.test(c(kme_cont_pisa_rep1_norm, kme_cont_pisa_rep2_norm, kme_cont_pisa_rep3_norm, kme_cont_pisa_rep4_norm),
+                       c(kme_dznep_pisa_rep1_norm, kme_dznep_pisa_rep2_norm, kme_dznep_pisa_rep3_norm, kme_dznep_pisa_rep4_norm))$p.value)%>%
+  ungroup()
+
+#desginating when something is up or down
+
+pisa_kme_norm<- pisa_kme_norm%>%
+  mutate(global_kme_pisa_type= case_when(kme.pisa.sm.mean > 1& kme.pisa.pval <=0.05 ~ "Stabilized with DZNep",
+                                 kme.pisa.sm.mean <= 1 & kme.pisa.pval <= 0.05 ~"Destabilized with DZNep",
+                                 TRUE ~ "ns"))
+
+#obtain pisa counts
+
+pisa_kme_norm%>%
+  count(global_kme_pisa_type)
+#obtain protein counts
+
+pisa_kme_norm%>%
+  count(Norm_global_kme_protein_type)
+
+table(pisa_kme_norm$Norm_global_kme_protein_type, pisa_kme_norm$Methyl_state)
+
+#Chi square test for the different states
+fisher.test(table(pisa_kme_norm$Methyl_state, pisa_kme_norm$Norm_global_kme_protein_type))
+
+```
+
+```{r writing csv}
+write.csv(pisa_kme_norm, "Kme_PISA_global_changes.csv")
+
+```
